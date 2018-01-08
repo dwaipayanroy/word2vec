@@ -1,29 +1,35 @@
-//  Copyright 2013 Google Inc. All Rights Reserved.
-//
-//  Licensed under the Apache License, Version 2.0 (the "License");
-//  you may not use this file except in compliance with the License.
-//  You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-//  Unless required by applicable law or agreed to in writing, software
-//  distributed under the License is distributed on an "AS IS" BASIS,
-//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  See the License for the specific language governing permissions and
-//  limitations under the License.
+/*
+*    Modified version of distance.c.
+*    It creates a file that contains NNs of a list of words given as command line input
+*    The default value of K is set to 30.
+*    The first line of the output file will contain: <no-of-root-words> <K>
+*    Output:
+*        <root-term_1>\t<nn_1:sim_1>\t<nn_2:sim_2>\t ... <nn_K:sim_K>\t\n
+*/
 
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 #include <malloc.h>
+#include <getopt.h>
+#include <stdlib.h>
 
 const long long max_size = 2000;         // max length of strings
-int N = 30;                  // number of closest words that will be shown
+int N = 30;                  // number of closest words that will be shown (default)
 const long long max_w = 1024;              // max length of vocabulary entries
 
+void print_usage() {
+    printf("Usage: distance_query_words "
+        "-i <FILE.bin: FILE contains word projections in the BINARY FORMAT> "
+        "-t <root-words> "
+        "[-k <k to calculate kNN (default-30)>] "
+        "[-o <output-file (default-stdout)>]\n");
+}
+
 int main(int argc, char **argv) {
-    FILE *f;
-	FILE *root_fp;
+    FILE *bin_file_fp;
+    FILE *root_fp;
+    FILE *output_fp;
     char st1[max_size];
     int root_word_count;
     int root_word_count2;
@@ -34,8 +40,8 @@ int main(int argc, char **argv) {
 //    char *bestw[N];
     char **bestw;
     float *bestd;
-    char file_name[max_size], st[100][max_size];
-	char root_words_file_name[max_size];
+    char bin_file[max_size], st[100][max_size];
+    char root_words_file_name[max_size];
     float dist, len/*, bestd[N]*/, vec[max_size];
     long long words, size, a, b, c, d, cn, bi[100], i;
     /* words: number of words in the vocabulary */
@@ -44,32 +50,79 @@ int main(int argc, char **argv) {
     float *M;
     /* M contains all the vectors */
     char *vocab;
+    int option;
+
+    // compulsary parameters check
+    short bin_file_arg = 0;
+    short root_file_arg = 0;
+    short output_file_arg = 0;
+    short mandatory_arg_count = 0;
+
     if (argc < 3) {
-        printf("Usage: ./distance <FILE.bin> <root-words> [number of closest words; default 30]\nwhere FILE contains word projections in the BINARY FORMAT\n");
+        /* printf("Usage: ./%s -i <FILE.bin: FILE contains word projections in the BINARY FORMAT> -t <root-words> [-k <k to calculate kNN (default-30)>] [-o <output-file (default-stdout)>]", argv[0]); */
+        print_usage();
         return 0;
     }
-    strcpy(file_name, argv[1]);
-    strcpy(root_words_file_name, argv[2]);
-    f = fopen(file_name, "rb");
-    root_fp = fopen(root_words_file_name, "rb");
-    if (argc == 4) {
-        N = atoi(argv[3]);
+
+    output_fp = stdout; // default output medium
+
+    while ((option = getopt(argc, argv,"i:o:t:k:")) != -1) {
+        switch (option) {
+        case 'i' : // FILE.bin
+            strcpy(bin_file, optarg);
+            i++;
+            bin_file_arg = 1;
+            mandatory_arg_count ++;
+            break;
+        case 't' : // root-words.txt
+            strcpy(root_words_file_name, optarg);
+            i++;
+            root_file_arg = 1;
+            mandatory_arg_count ++;
+            break;
+        case 'k' : // number of NNs to compute; default is 30
+            N = atoi(optarg);
+            i++;
+            break;
+        case 'o' : // output.txt; default is STDOUT
+            output_fp = fopen(optarg , "w");
+            i++;
+            output_file_arg = 1;
+            break;
+        default: print_usage(); 
+            exit(EXIT_FAILURE);
+        }
     }
-	// +++
-	term_flag = 0;
-	root_word_count = 0;
-	do {
-		ch = fgetc(root_fp);
-		//printf("%c", ch);
-		if((ch == ' ' || ch == '\t' || ch == '\n' || ch == EOF) && term_flag == 1) {
-			root_word_count++;
-			term_flag = 0;
-	    }
-	    else
-	        term_flag = 1;
-	} while (ch!=EOF);
-	//printf("%d\n", root_word_count);
-	if(fseek(root_fp, 0L, SEEK_SET) != 0)
+
+    if(mandatory_arg_count != 2)
+    {
+        print_usage(); 
+        printf("Mandatory parameter missing. Exiting...\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* strcpy(bin_file, argv[1]); */
+    /* strcpy(root_words_bin_file, argv[2]); */
+    bin_file_fp = fopen(bin_file, "rb");
+    root_fp = fopen(root_words_file_name, "rb");
+    /* if (argc == 4) { */
+    /*     N = atoi(argv[3]); */
+    /* } */
+    // +++
+    term_flag = 0;
+    root_word_count = 0;
+    do {
+        ch = fgetc(root_fp);
+        //printf("%c", ch);
+        if((/* ch == ' ' || */ ch == '\t' || ch == '\n' || ch == EOF) && term_flag == 1) {
+            root_word_count++;
+            term_flag = 0;
+        }
+        else
+            term_flag = 1;
+    } while (ch!=EOF);
+    printf("Number of root words: %d\n", root_word_count);
+    if(fseek(root_fp, 0L, SEEK_SET) != 0)
     {
         printf("Error rewinding the file");
     }
@@ -81,33 +134,32 @@ int main(int argc, char **argv) {
     root_term[0] = '\0';
     term_flag = 0;
     count = 0;
-	do {
-		ch = fgetc(root_fp);
-		if((ch == ' ' || ch == '\t' || ch == '\n' || ch == EOF) && term_flag == 1) {
-		    root_term[count] = '\0';
-			strcpy(root_terms[--root_word_count], root_term);
-			count = 0;
-			term_flag = 0;
-	    }
-	    else {
-	        root_term[count++] = ch;
-	        term_flag = 1;
-	    }
-	} while (ch!=EOF);
+    do {
+        ch = fgetc(root_fp);
+        if((/* ch == ' ' || */ ch == '\t' || ch == '\n' || ch == EOF) && term_flag == 1) {
+            root_term[count] = '\0';
+            strcpy(root_terms[--root_word_count2], root_term);
+            count = 0;
+            term_flag = 0;
+        }
+        else {
+            root_term[count++] = ch;
+            term_flag = 1;
+        }
+    } while (ch!=EOF);
 
-//    for (i=0; i<root_word_count2; i++)
+//    for (i=0; i<root_word_count; i++)
 //        printf("%s\n", root_terms[i]);
-	// ---
-
+    // ---
 
     bestw = (char**)malloc(N * sizeof(char*));
     bestd = (float*)malloc(N * sizeof(float*));
-    if (f == NULL) {
+    if (bin_file_fp == NULL) {
         printf("Input file not found\n");
         return -1;
     }
-    fscanf(f, "%lld", &words);
-    fscanf(f, "%lld", &size);
+    fscanf(bin_file_fp, "%lld", &words);
+    fscanf(bin_file_fp, "%lld", &size);
     vocab = (char *)malloc((long long)words * max_w * sizeof(char));
     for (a = 0; a < N; a++) bestw[a] = (char *)malloc(max_size * sizeof(char));
     M = (float *)malloc((long long)words * (long long)size * sizeof(float));
@@ -118,26 +170,31 @@ int main(int argc, char **argv) {
     for (b = 0; b < words; b++) {
         a = 0;
         while (1) {
-            vocab[b * max_w + a] = fgetc(f);
-            if (feof(f) || (vocab[b * max_w + a] == ' ')) break;
+            vocab[b * max_w + a] = fgetc(bin_file_fp);
+            if (feof(bin_file_fp) || (vocab[b * max_w + a] == ' ')) break;
             if ((a < max_w) && (vocab[b * max_w + a] != '\n')) a++;
         }
         vocab[b * max_w + a] = 0;
-        for (a = 0; a < size; a++) fread(&M[a + b * size], sizeof(float), 1, f);
+        for (a = 0; a < size; a++) fread(&M[a + b * size], sizeof(float), 1, bin_file_fp);
         len = 0;
         for (a = 0; a < size; a++) len += M[a + b * size] * M[a + b * size];
         len = sqrt(len);
         for (a = 0; a < size; a++) M[a + b * size] /= len;
     }
-    fclose(f);
-    for (i = 0; i < root_word_count2; i++) {
+    fclose(bin_file_fp);
+
+    fprintf(output_fp, "%d %d\n", root_word_count, N);
+
+    for (i = 0; i < root_word_count; i++) {
 
         for (a = 0; a < N; a++) bestd[a] = 0;
         for (a = 0; a < N; a++) bestw[a][0] = 0;
         a = 0;
         strcpy(st1, root_terms[i]);
-        //* st1 = the input string 
-		printf("%s\t", st1);
+        //* st1 = the input string
+        if( output_file_arg && (0 == (i+1)%100) )
+            printf("Computed NN for %lld out of %d words\n", i+1, root_word_count);
+        fprintf(output_fp, "%s\t", st1);
         if (!strcmp(st1, "EXIT")) break;
         cn = 0;
         b = 0;
@@ -163,7 +220,7 @@ int main(int argc, char **argv) {
             bi[a] = b;
 //            printf("\nWord: %s  Position in vocabulary: %lld\n", st[a], bi[a]);
             if (b == -1) {
-                printf("Out of dictionary word!\n");
+                fprintf(output_fp, "OOV\n");
                 break;
             }
         }
@@ -205,9 +262,12 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        for (a = 0; a < N; a++) printf("%s %f\t", bestw[a], bestd[a]);
-        printf("\n");
+        for (a = 0; a < N; a++)
+            fprintf(output_fp, "%s:%f\t", bestw[a], bestd[a]);
+        fprintf(output_fp, "\n");
     }
+    fclose(output_fp);
+    fclose(root_fp);
 
-	return 0;
+    return 0;
 }
