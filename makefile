@@ -2,8 +2,10 @@ CC = gcc
 #Using -Ofast instead of -O3 might result in faster code, but is supported only by newer GCC versions
 CFLAGS = -lm -pthread -O3 -march=native -Wall -funroll-loops -Wno-unused-result
 
-all: word2vec word2phrase distance distance_all_words distance_query_words word-analogy compute-accuracy
+all: word2vec word2phrase distance distance_all_words distance_query_words word-analogy compute-accuracy vec2bin
 
+vec2bin : vecToBin.c
+	$(CC) vecToBin.c -o vecToBin $(CFLAGS)
 word2vec : word2vec.c
 	$(CC) word2vec.c -o word2vec $(CFLAGS)
 word2phrase : word2phrase.c

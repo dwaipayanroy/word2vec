@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     /* M contains all the vectors */
     char *vocab;
     if (argc < 2) {
-        printf("Usage: ./distance <FILE>\nwhere FILE contains word projections in the BINARY FORMAT\n");
+        printf("Usage: ./distance <FILE.bin>\nwhere FILE contains word projections in the BINARY FORMAT\n");
         return 0;
     }
     strcpy(file_name, argv[1]);
